@@ -118,11 +118,7 @@ void writeArrayToFile(int columns, int *arr){
     for(int c = 0; c < columns; c++)
     {
         int element = arr[c];
-        if (c == columns - 1){
-            fprintf(f, "%d", element);
-        } else {
-            fprintf(f, "%d,", element);
-        }
+        fprintf(f, "%d\n", element);
     }
     
     fclose(f);
