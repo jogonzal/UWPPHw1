@@ -1,7 +1,10 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 void printRow(int columns, int *arr){
     printf("[");
@@ -34,6 +37,76 @@ void singleThreadedMatrixMultiply(int inputMatrixRows, int inputMatrixColumns, i
     }
 }
 
+struct multiply_work {
+	int startRow;
+    int numRows;
+    int numColumns;
+	int threadId;
+	int *vector;
+	int *result;
+    int** matrix;
+};
+
+void printMultiplyWork(struct multiply_work multiplyWork){
+	printf("ThreadId:%d, NumRows:%d, NumColumns: %d, StartRow:%d\n", multiplyWork.threadId, multiplyWork.numRows, multiplyWork.numColumns, multiplyWork.startRow);
+}
+
+void *partialMatrixMultiplication(void *arg) {
+    struct multiply_work  *multiplyWork = arg;
+
+	printMultiplyWork(*multiplyWork);
+
+	for(int r = multiplyWork->startRow; r < multiplyWork->startRow + multiplyWork->numRows; r++){
+        int *rowToMultiply = multiplyWork->matrix[r];
+        int acc = 0;
+        for(int c = 0; c < multiplyWork->numColumns; c++){
+			int x = rowToMultiply[c];
+			int y = multiplyWork->vector[c];
+			int res = x * y;
+			
+            acc = acc + res;
+        }
+        multiplyWork->result[r] = acc;
+	}
+	
+	return NULL;
+}
+void parallelMatrixMultiply(int threadCount, int inputMatrixRows, int inputMatrixColumns, int **matrix, int *vector, int *result){
+    // Every thread will receive an equal interval to process (startRow + numRows)
+	struct multiply_work *multiplyWorkArr = malloc(sizeof(struct multiply_work) * threadCount);
+	int chunk = inputMatrixRows / threadCount;
+	pthread_t *threads = malloc(sizeof(*threads) * threadCount);
+	int currentRow = 0;
+	for(int i = 0; i < threadCount; i++){
+		struct multiply_work *multiplyWork = &multiplyWorkArr[i];
+		multiplyWork->matrix = matrix;
+		multiplyWork->vector = vector;
+		multiplyWork->startRow = currentRow;
+		multiplyWork->result = result;
+		multiplyWork->threadId = i;
+		multiplyWork->numColumns = inputMatrixColumns;
+		if (i == threadCount - 1){
+			multiplyWork->numRows = inputMatrixRows - chunk * (threadCount - 1);
+		} else {
+			multiplyWork->numRows = chunk;
+		}
+		currentRow+=multiplyWork->numRows;
+		
+		// Create and kick off the thread
+        if (pthread_create(&threads[i], NULL, partialMatrixMultiplication, multiplyWork) != 0) {
+            perror("Failed to create thread\n");
+        } else {
+			printf("Kicked off thread id %d\n", i);
+		}
+	}
+	
+	// Join threads after they are done
+    for (int i = 0; i < threadCount; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    free(multiplyWorkArr);
+}
+
 void writeArrayToFile(int columns, int *arr){
     FILE *f = fopen("output.txt", "w+");
     if (f == NULL)
@@ -55,8 +128,15 @@ void writeArrayToFile(int columns, int *arr){
     fclose(f);
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        printf("usage: %s threads\n", argv[0]);
+        return -1;
+    }
+	
+	int threadCount = atoi(argv[1]);
+	printf("Will do processing with %d threads.", threadCount);
+	
     char const* const fileName = "input.txt"; /* should check that argc > 1 */
     FILE* file = fopen(fileName, "r"); /* should check the result */
     char line[1024];
@@ -132,7 +212,7 @@ int main(int argc, char* argv[])
     }
     
     int inputVectorRows = inputMatrixColumns;
-    printInputParameters(inputMatrixRows, inputMatrixColumns, inputVectorRows, matrix, vector);
+    //printInputParameters(inputMatrixRows, inputMatrixColumns, inputVectorRows, matrix, vector);
     fclose(file);
 
     // At this point, we are done reading from the file. We will perform matrix multiply now
@@ -140,8 +220,9 @@ int main(int argc, char* argv[])
     // Matrix multiply - grab the entire vector and the ith row, then multiply and sum one by one
     int *result = (int*) malloc(sizeof(int) * inputVectorRows);
     
-    singleThreadedMatrixMultiply(inputMatrixRows, inputMatrixColumns, matrix, vector, result);
-    
+    //singleThreadedMatrixMultiply(inputMatrixRows, inputMatrixColumns, matrix, vector, result);
+    parallelMatrixMultiply(threadCount, inputMatrixRows, inputMatrixColumns, matrix, vector, result);
+	
     printf("The resulting vector is\n");
     printRow(inputVectorRows, result);
     
