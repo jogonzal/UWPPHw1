@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <time.h>
 
 void printRow(int columns, int *arr){
     printf("[");
@@ -54,7 +55,7 @@ void printMultiplyWork(struct multiply_work multiplyWork){
 void *partialMatrixMultiplication(void *arg) {
     struct multiply_work  *multiplyWork = arg;
 
-	printMultiplyWork(*multiplyWork);
+	// printMultiplyWork(*multiplyWork);
 
 	for(int r = multiplyWork->startRow; r < multiplyWork->startRow + multiplyWork->numRows; r++){
         int *rowToMultiply = multiplyWork->matrix[r];
@@ -91,20 +92,34 @@ void parallelMatrixMultiply(int threadCount, int inputMatrixRows, int inputMatri
 			multiplyWork->numRows = chunk;
 		}
 		currentRow+=multiplyWork->numRows;
+	}
+	
+	// Start measurement
+	clock_t start, end;
+    start = clock();
+	
+	for(int i = 0; i < threadCount; i++){
+		struct multiply_work *multiplyWork = &multiplyWorkArr[i];
 		
 		// Create and kick off the thread
         if (pthread_create(&threads[i], NULL, partialMatrixMultiplication, multiplyWork) != 0) {
             perror("Failed to create thread\n");
-        } else {
-			printf("Kicked off thread id %d\n", i);
-		}
+        }
 	}
-	
+
 	// Join threads after they are done
     for (int i = 0; i < threadCount; i++) {
         pthread_join(threads[i], NULL);
     }
+
+	// End measurement
+	
+    end = clock();
+    printf("Difference is %\n", (end - start));
+	
+		
     free(multiplyWorkArr);
+    free(threads);
 }
 
 void writeArrayToFile(int columns, int *arr){
@@ -118,7 +133,11 @@ void writeArrayToFile(int columns, int *arr){
     for(int c = 0; c < columns; c++)
     {
         int element = arr[c];
-        fprintf(f, "%d\n", element);
+        if (c == columns - 1){
+            fprintf(f, "%d", element);
+        } else {
+            fprintf(f, "%d,", element);
+        }
     }
     
     fclose(f);
