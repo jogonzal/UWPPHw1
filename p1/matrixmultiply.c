@@ -94,10 +94,7 @@ void parallelMatrixMultiply(int threadCount, int inputMatrixRows, int inputMatri
 		currentRow+=multiplyWork->numRows;
 	}
 	
-	// Start measurement
-	clock_t start, end;
-    start = clock();
-	
+
 	for(int i = 0; i < threadCount; i++){
 		struct multiply_work *multiplyWork = &multiplyWorkArr[i];
 		
@@ -111,13 +108,7 @@ void parallelMatrixMultiply(int threadCount, int inputMatrixRows, int inputMatri
     for (int i = 0; i < threadCount; i++) {
         pthread_join(threads[i], NULL);
     }
-
-	// End measurement
 	
-    end = clock();
-    printf("Difference is %\n", (end - start));
-	
-		
     free(multiplyWorkArr);
     free(threads);
 }
@@ -144,16 +135,16 @@ void writeArrayToFile(int columns, int *arr){
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        printf("usage: %s threads\n", argv[0]);
+    if (argc != 3) {
+        printf("usage: %s threads inputfile\n", argv[0]);
         return -1;
     }
 	
 	int threadCount = atoi(argv[1]);
-	printf("Will do processing with %d threads.", threadCount);
+	char* inputFile = argv[2];
+	printf("Will do processing with %d threads and on inputfile %s.\n", threadCount, inputFile);
 	
-    char const* const fileName = "input.txt"; /* should check that argc > 1 */
-    FILE* file = fopen(fileName, "r"); /* should check the result */
+    FILE* file = fopen(inputFile, "r"); /* should check the result */
     char line[1024];
 
     int inputMatrixRows = -1;
@@ -241,6 +232,7 @@ int main(int argc, char *argv[]) {
     printf("The resulting vector is\n");
     printRow(inputVectorRows, result);
     
+	printf("\nI wrote this to output.txt.\n\n");
     writeArrayToFile(inputMatrixColumns, result);
     
     free(vector);
