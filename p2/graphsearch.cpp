@@ -61,9 +61,9 @@ int main(int argc, char* argv[])
     }
 	
 	int threadCount = atoi(argv[1]);
-	unsigned long long target = (unsigned long long)atoi(argv[2]);
+	unsigned long long rootValue = (unsigned long long)atoi(argv[2]);
 	
-	printf("Starting. ThreadCount %d, target %llx\n", threadCount, target);
+	printf("Starting. ThreadCount %d, root %llx\n", threadCount, rootValue);
     char const* const fileName = "graphinput.bin";
     FILE* file = fopen(fileName, "r");
 
@@ -75,7 +75,6 @@ int main(int argc, char* argv[])
  
 	map<unsigned long long, Node*> *graphInputMap = new map<unsigned long long, Node*>();
 
-	Node *root = NULL;
 	
     for (;;) {
         size_t elementsRead = fread(buff, sizeof(struct edge), buffSize, file);
@@ -85,37 +84,38 @@ int main(int argc, char* argv[])
 			Node *nodeOrigin = GetOrCreateNode(graphInputMap, edge.origin);
 			Node *nodeDestination = GetOrCreateNode(graphInputMap, edge.destination);
 			nodeOrigin->children->push_back(nodeDestination);
-			
-			if (root == NULL){
-				printf("Setting root to first node seen: %llx\n", edge.origin);
-				root = nodeOrigin;
-			}
 		}
         if (elementsRead < buffSize) { break; }
     }
 	
-	// Confim that input actually exists somewhere
+	fclose(file);
+	
+	// Get the pointer to the root
+	Node *root = NULL;
 	std::map<unsigned long long, Node*>::iterator it;
-	it = graphInputMap->find(target);
+	it = graphInputMap->find(rootValue);
 	if (it != graphInputMap->end()){
-		printf("Your node was in the input file. It might still somehow not be connected to root\n");
+		printf("The root you specified was in the input file. Now calculating stats...\n");
+		root = it->second;
 	} else {
-		printf("Where did you get this value from? It wasn't in the input file\n");
+		printf("Where did you get this value from? The root you specified wasn't in the input file\n");
 	}
+	
+	printf("I read %d edges and have found %lu vertices (in total). Now doing breadth first search to calculate the number of edges and vertices from root \n",
+				edgesRead, graphInputMap->size());
+				
 	free(graphInputMap);
 	free(buff);
 	
 	// Now that we've read and loaded all of the elements, we can do breadth first search
 	
-	printf("I read %d edges and have found %lu nodes. Now doing breadth first search\n", edgesRead, graphInputMap->size());
-	
-	int level = 0;
-	int exploreCount = 0;
+	int maxLevel = 0; // Assumming at least root exists, level is 1
+	int vertexCount = 0;
+	int edgeCount = 0;
 	queue<Node*> *bfsQueue = new queue<Node*>();
 	bfsQueue->push(root);
-	Node *targetNode = NULL;
-	while(targetNode == NULL && bfsQueue->size() > 0){
-		printf("Level %d has %lu elements. Exploring...\n", level, bfsQueue->size());
+	while(bfsQueue->size() > 0){
+		printf("Level %d has %lu elements to explore. Exploring...\n", maxLevel, bfsQueue->size());
 		
 		queue<Node*> *newQueue = new queue<Node*>();
 		
@@ -123,56 +123,33 @@ int main(int argc, char* argv[])
 		while(bfsQueue->size() > 0){
 			Node *nodeToExplore = bfsQueue->front();
 			bfsQueue->pop();
+			
+			edgeCount++; // Edges have to be counted, even if we already visited that node
+
 			// Skip if already visited
 			if (!nodeToExplore->visited){
-				exploreCount++;
-				if (nodeToExplore->id == target){
-					targetNode = nodeToExplore;
-					break;
-				}
+				vertexCount++;
 				
-				// Push all children if not visited
+				// Push all children
 				for (vector<Node*>::iterator it = nodeToExplore->children->begin() ; it != nodeToExplore->children->end(); ++it){
 					Node *child = *it;
 					child->previous = nodeToExplore; // For shortest path
 					newQueue->push(child);
 				}
+				
+				// Mark as visited
 				nodeToExplore->visited = true;
 			}
 		}
 		
 		free(bfsQueue);
 		bfsQueue = newQueue;
-		level++;
+		maxLevel++;
 	}
 
-	printf("Explored a total of %d elements.\n", exploreCount);
+	printf("Found %d vertices, %d maxLevel, %d edges.\n", vertexCount, maxLevel, edgeCount);
 	
 	free(bfsQueue);
-
-	if (targetNode == NULL){
-		printf("Could not find target node.\n");
-	}else {
-		printf("Found target node!\n");
-		Node *currentNode = targetNode;
-		stack<Node*> *s = new stack<Node*>();
-		while(currentNode != NULL){
-			s->push(currentNode);
-			currentNode = currentNode->previous;
-		}
-		printf("Shortest path is\n");
-		printf("ROOT ->");
-		while(s->size() > 0){
-			Node *next = s->top();
-			s-> pop();
-			printf(" %llx ->", next->id);
-		}
-		free(s);
-		printf(" DONE!\n");
-	}
-	
-	fclose(file);
-    free(buff);
 
     return 0;
 }
