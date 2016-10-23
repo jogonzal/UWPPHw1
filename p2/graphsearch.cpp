@@ -58,7 +58,7 @@ Node* GetOrCreateNode(map<unsigned long long, Node*> *graphInputMap, unsigned lo
 }
 
 void PrintToFileAndConsole(int verticesTotal, int edgesTotal, unsigned long long rootValue, int vertexCount, int maxLevel){
-	printf("\n\nGraph vertices: %d with total edges %d. Reached vertices from %llx is %d and max level is %d.\n\n",
+	printf("\n\nGraph vertices: %d with total edges %d. Reached vertices from %lld is %d and max level is %d.\n\n",
 		verticesTotal, edgesTotal, rootValue, vertexCount, maxLevel);
 		
 	FILE *f = fopen("output.txt", "w+");
@@ -68,7 +68,7 @@ void PrintToFileAndConsole(int verticesTotal, int edgesTotal, unsigned long long
         exit(1);
     }
     
-    fprintf(f, "Graph vertices: %d with total edges %d. Reached vertices from %llx is %d and max level is %d.\n\n",
+    fprintf(f, "Graph vertices: %d with total edges %d. Reached vertices from %lld is %d and max level is %d.\n\n",
 		verticesTotal, edgesTotal, rootValue, vertexCount, maxLevel);
     
 	printf("I wrote this to output.txt\n");
@@ -76,9 +76,11 @@ void PrintToFileAndConsole(int verticesTotal, int edgesTotal, unsigned long long
     fclose(f);
 }
 
-void SingleThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *root){
+void SingleThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *root, Node **deepestNode){
 	queue<Node*> *bfsQueue = new queue<Node*>();
 	bfsQueue->push(root);
+	root->visited = true;
+	(*edgeCount)++;
 	while(bfsQueue->size() > 0){
 		printf("Level %d has %lu elements to explore. Exploring...\n", *maxLevel, bfsQueue->size());
 		
@@ -89,21 +91,23 @@ void SingleThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *ro
 			Node *nodeToExplore = bfsQueue->front();
 			bfsQueue->pop();
 			
-			(*edgeCount)++; // Edges have to be counted, even if we already visited that node
+			(*vertexCount)++;
 
-			// Skip if already visited
-			if (!nodeToExplore->visited){
-				(*vertexCount)++;
-				
-				// Push all children
-				for (vector<Node*>::iterator it = nodeToExplore->children->begin() ; it != nodeToExplore->children->end(); ++it){
-					Node *child = *it;
+			// Keep track of deepest node
+			*deepestNode = nodeToExplore;
+			
+			// Push all children that are not visited
+			for (vector<Node*>::iterator it = nodeToExplore->children->begin() ; it != nodeToExplore->children->end(); ++it){
+				(*edgeCount)++; // Edges have to be counted, even if we already visited that node
+
+				Node *child = *it;
+				// Skip if already visited
+				if (!child->visited){
 					child->previous = nodeToExplore; // For shortest path
 					newQueue->push(child);
+					// Mark as visited
+					child->visited = true;
 				}
-				
-				// Mark as visited
-				nodeToExplore->visited = true;
 			}
 		}
 		
@@ -128,6 +132,7 @@ struct bfs_work {
 	bool *workDonePartitionArr;
 	bool *workDoneMergeArr;
 	int threadId;
+	Node **deepestNode;
 };
 
 void printBfsWork(struct bfs_work *bfsWork){
@@ -187,27 +192,27 @@ void *parallelBfsWork(void *arg) {
 		while(sourceQueue->size() > 0){
 			Node *nodeToExplore = sourceQueue->front();
 			sourceQueue->pop();
-			
-			(*(bfsWork->edgeCount))++; // Edges have to be counted, even if we already visited that node
+			(*(bfsWork->vertexCount))++; // Vertex are counted uniquely only
 
-			// Skip if already visited
-			// Avoid locks as much as possible
-			if (!nodeToExplore->visited){
-				pthread_mutex_lock(nodeToExplore->lock);
-				// Race condition is possible here, so check boolean flag again
-				if (!nodeToExplore->visited){
-					(*(bfsWork->vertexCount))++; // Vertex are counted uniquely only
-					// Push all children
-					for (vector<Node*>::iterator it = nodeToExplore->children->begin() ; it != nodeToExplore->children->end(); ++it){
-						Node *child = *it;
+			// Keep track of deepest node
+			*(bfsWork->deepestNode) = nodeToExplore;
+			
+			// Push all children
+			for (vector<Node*>::iterator it = nodeToExplore->children->begin() ; it != nodeToExplore->children->end(); ++it){
+				Node *child = *it;
+				(*(bfsWork->edgeCount))++; // Edges have to be counted, even if we already visited that node
+				// Skip if already visited
+				// Avoid locks as much as possible
+				if (!child->visited){
+					pthread_mutex_lock(child->lock);
+					if (!child->visited){
 						child->previous = nodeToExplore; // For shortest path
 						destinationQueue->push(child);
+						// Mark as visited
+						child->visited = true;
 					}
-					
-					// Mark as visited
-					nodeToExplore->visited = true;
+					pthread_mutex_unlock(child->lock);
 				}
-				pthread_mutex_unlock(nodeToExplore->lock);
 			}
 		}
 		
@@ -238,9 +243,10 @@ void *parallelBfsWork(void *arg) {
 	}
 }
 
-void MultiThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *root, int threadCount){
+void MultiThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *root, Node **deepestNode, int threadCount){
 	queue<Node*> *mainQueue = new queue<Node*>();
 	mainQueue->push(root);
+	root->visited = true;
 	
 	pthread_t *threads = new pthread_t[threadCount]();
 	
@@ -276,7 +282,10 @@ void MultiThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *roo
 		bfsWork->workDonePartitionArr = workDonePartitionArr;
 		bfsWork->workDoneMergeArr = workDoneMergeArr;
 		bfsWork->threadCount = threadCount;
+		bfsWork->deepestNode = deepestNode;
 	}
+	
+	(*edgeCount)++; // Initial edge
 	
 	printf("All the work has been calculated, so kicking off threads...\n");
 	
@@ -359,11 +368,12 @@ int main(int argc, char* argv[])
 		root = it->second;
 	} else {
 		printf("Where did you get this value from? The root you specified wasn't in the input file\n");
+		exit(1);
 	}
 	
 	int verticesTotal = graphInputMap->size();
 	
-	printf("I read %d edges and have found %d vertices (in total). Now doing breadth first search to calculate the number of edges and vertices from root %llx \n",
+	printf("I read %d edges and have found %d vertices (in total). Now doing breadth first search to calculate the number of edges and vertices from root 0x%llx \n",
 				edgesTotal, verticesTotal, rootValue);
 
 	free(graphInputMap);
@@ -375,8 +385,27 @@ int main(int argc, char* argv[])
 	int vertexCount = 0;
 	int edgeCount = 0;
 	
-	//SingleThreadedBfs(&maxLevel, &vertexCount, &edgeCount, root);
-	MultiThreadedBfs(&maxLevel, &vertexCount, &edgeCount, root, threadCount);
+	Node *deepestNode = NULL;
+	
+	// SingleThreadedBfs(&maxLevel, &vertexCount, &edgeCount, root, &deepestNode);
+	MultiThreadedBfs(&maxLevel, &vertexCount, &edgeCount, root, &deepestNode, threadCount);
+	
+	printf("Here is proof that the max level is %d.\n", maxLevel);
+	Node *currentNode = deepestNode;
+	stack<Node*> *s = new stack<Node*>();
+	while(currentNode != NULL){
+		s->push(currentNode);
+		currentNode = currentNode->previous;
+	}
+	printf("A sample path that has this depth is \n");
+	printf("ROOT ->");
+	while(s->size() > 0){
+		Node *next = s->top();
+		s-> pop();
+		printf(" 0x%llx ->", next->id);
+	}
+	free(s);
+	printf(" done!\n");
 	
 	PrintToFileAndConsole(verticesTotal, edgesTotal, rootValue, vertexCount, maxLevel);
 
