@@ -81,6 +81,7 @@ void SingleThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *ro
 	bfsQueue->push(root);
 	root->visited = true;
 	(*edgeCount)++;
+	(*maxLevel) = -1; // Will be incremented to at least 0
 	while(bfsQueue->size() > 0){
 		printf("Level %d has %lu elements to explore. Exploring...\n", *maxLevel, bfsQueue->size());
 		
@@ -239,7 +240,7 @@ void *parallelBfsWork(void *arg) {
 		
 		printf("%d : Main queue has %lu elements, local source has %lu and destination %lu\n", bfsWork->threadId, bfsWork->mainQueue->size(), sourceQueue->size(), destinationQueue->size());
 		level++;
-		*bfsWork->maxLevel = level;
+		*bfsWork->maxLevel = level - 1;
 	}
 }
 
@@ -347,12 +348,13 @@ int main(int argc, char* argv[])
 	
     for (;;) {
         size_t elementsRead = fread(buff, sizeof(struct edge), buffSize, file);
-		edgesTotal += elementsRead;
+		edgesTotal += elementsRead * 2;
         for(int i = 0; i < elementsRead; i++){
             struct edge edge = buff[i];
 			Node *nodeOrigin = GetOrCreateNode(graphInputMap, edge.origin);
 			Node *nodeDestination = GetOrCreateNode(graphInputMap, edge.destination);
 			nodeOrigin->children->push_back(nodeDestination);
+			nodeDestination->children->push_back(nodeOrigin);
 		}
         if (elementsRead < buffSize) { break; }
     }
