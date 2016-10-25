@@ -8,6 +8,8 @@
 #include <stack>
 #include <stdbool.h>
 #include <pthread.h>
+#include <time.h>
+#include <sys/time.h>
 
 using namespace std;
 
@@ -83,7 +85,7 @@ void SingleThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *ro
 	(*edgeCount)++;
 	(*maxLevel) = -1; // Will be incremented to at least 0
 	while(bfsQueue->size() > 0){
-		printf("Level %d has %lu elements to explore. Exploring...\n", *maxLevel, bfsQueue->size());
+		// printf("Level %d has %lu elements to explore. Exploring...\n", *maxLevel, bfsQueue->size());
 		
 		queue<Node*> *newQueue = new queue<Node*>();
 		
@@ -158,7 +160,7 @@ void *parallelBfsWork(void *arg) {
 		pthread_mutex_lock(bfsWork->mainLock);
 		//printf("%d: Acquired lock!\n", bfsWork->threadId);
 		if (!bfsWork->workDonePartitionArr[level]){
-			printf("%d: Partitioning...\n", bfsWork->threadId);
+			// printf("%d: Partitioning...\n", bfsWork->threadId);
 			int queueSize = bfsWork->mainQueue->size();
 			int chunk = queueSize / bfsWork->threadCount;
 			//printf("%d: Chunk is %d...\n", bfsWork->threadId, chunk);
@@ -222,7 +224,7 @@ void *parallelBfsWork(void *arg) {
 		pthread_mutex_lock(bfsWork->mainLock);
 		//printf("%d: Acquired lock!\n", bfsWork->threadId);
 		if (!bfsWork->workDoneMergeArr[level]){
-			printf("%d: Merging...\n", bfsWork->threadId);
+			//printf("%d: Merging...\n", bfsWork->threadId);
 			for(int threadIndex = 0; threadIndex < bfsWork->threadCount; threadIndex++){
 				queue<Node*> *localQueue = &bfsWork->partitionedDestinationQueueArr[threadIndex];
 				while(localQueue->size() > 0){
@@ -238,7 +240,7 @@ void *parallelBfsWork(void *arg) {
 
 		//printf("%d: Exit merging stage!\n", bfsWork->threadId);
 		
-		printf("%d : Main queue has %lu elements, local source has %lu and destination %lu\n", bfsWork->threadId, bfsWork->mainQueue->size(), sourceQueue->size(), destinationQueue->size());
+		// printf("%d : Main queue has %lu elements, local source has %lu and destination %lu\n", bfsWork->threadId, bfsWork->mainQueue->size(), sourceQueue->size(), destinationQueue->size());
 		level++;
 		*bfsWork->maxLevel = level - 1;
 	}
@@ -288,7 +290,7 @@ void MultiThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *roo
 	
 	(*edgeCount)++; // Initial edge
 	
-	printf("All the work has been calculated, so kicking off threads...\n");
+	//printf("All the work has been calculated, so kicking off threads...\n");
 	
 	for(int i = 0; i < threadCount; i++){
 		struct bfs_work *bfsWork = &bfsWorkArr[i];
@@ -302,7 +304,7 @@ void MultiThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *roo
     for (int i = 0; i < threadCount; i++) {
         pthread_join(threads[i], NULL);
     }
-	printf("Threads have been joined...\n");
+	//printf("Threads have been joined...\n");
 
 	// Add up vertex and edge counts
 	for(int i = 0; i < threadCount; i++){
@@ -319,7 +321,7 @@ void MultiThreadedBfs(int *maxLevel, int *vertexCount, int *edgeCount, Node *roo
     delete[] partitionedDestinationQueueArr;
     delete[] threads;
 	
-	printf("Parallel work done.\n");
+	// printf("Parallel work done.\n");
 }
 
 int main(int argc, char* argv[])
@@ -389,8 +391,20 @@ int main(int argc, char* argv[])
 	
 	Node *deepestNode = NULL;
 	
+	printf("Running BFS...\n\n");
+	
+	struct timeval start, end;
+	gettimeofday(&start, NULL);
+
 	// SingleThreadedBfs(&maxLevel, &vertexCount, &edgeCount, root, &deepestNode);
 	MultiThreadedBfs(&maxLevel, &vertexCount, &edgeCount, root, &deepestNode, threadCount);
+		  
+	gettimeofday(&end, NULL);
+	
+	printf("Done!===============\n");
+	printf("Time taken: %ld\n", ((end.tv_sec * 1000000 + end.tv_usec)
+	  - (start.tv_sec * 1000000 + start.tv_usec)));
+	printf("\n\n");
 	
 	printf("Here is proof that the max level is %d.\n", maxLevel);
 	Node *currentNode = deepestNode;

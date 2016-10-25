@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/time.h>
 
 void printRow(int columns, int *arr){
     printf("[");
@@ -222,13 +223,27 @@ int main(int argc, char *argv[]) {
     fclose(file);
 
     // At this point, we are done reading from the file. We will perform matrix multiply now
+
+	printf("Running BFS...\n\n");
     
     // Matrix multiply - grab the entire vector and the ith row, then multiply and sum one by one
     int *result = (int*) malloc(sizeof(int) * inputVectorRows);
     
+	struct timeval start, end;
+	gettimeofday(&start, NULL);
+
+		
     //singleThreadedMatrixMultiply(inputMatrixRows, inputMatrixColumns, matrix, vector, result);
     parallelMatrixMultiply(threadCount, inputMatrixRows, inputMatrixColumns, matrix, vector, result);
+
+	gettimeofday(&end, NULL);
+
+	printf("Done!===============\n");
+	printf("Time taken: %ld\n", ((end.tv_sec * 1000000 + end.tv_usec)
+	  - (start.tv_sec * 1000000 + start.tv_usec)));
+	printf("\n\n");
 	
+
     printf("The resulting vector is\n");
     printRow(inputVectorRows, result);
     
