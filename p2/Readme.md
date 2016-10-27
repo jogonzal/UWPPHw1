@@ -31,3 +31,9 @@ Test C (input 201)
 Graph vertices: 46836 with total edges 2097152.  Reached vertices from 201 is 46814 and max level is 5
 Test D (input 3613)
 Graph vertices: 46836 with total edges 2097152.  Reached vertices from 3613 is 2 and max level is 1
+
+Sample call
+make
+./main threads root inputfile
+ 
+./main 2 200 graphinput.bin
